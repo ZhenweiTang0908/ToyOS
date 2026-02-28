@@ -2,6 +2,7 @@
 use crate::{println, print};
 use crate::vga_buffer::WRITER;
 use crate::task::keyboard::ScancodeStream;
+use crate::task::time::TickStream;
 use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 use futures_util::stream::StreamExt;
 use alloc::string::String;
@@ -88,6 +89,9 @@ async fn execute_command(command: &str) {
             println!("  alloc_test - Test heap allocation");
             println!("  snake      - Play Snake game!");
             println!("  panic      - Trigger a kernel panic");
+            println!("  ps         - List active tasks");
+            println!("  kill <id>  - Request a task to stop");
+            println!("  sleep <n>  - Sleep for n timer ticks");
         }
         "echo" => {
             let rest: String = parts.collect::<Vec<&str>>().join(" ");
@@ -123,9 +127,82 @@ async fn execute_command(command: &str) {
         "panic" => {
             panic!("Manual panic triggered by user!");
         }
+        "ps" => {
+            let tasks = crate::task::executor::snapshot_tasks();
+            if tasks.is_empty() {
+                println!("No active tasks.");
+                return;
+            }
+
+            println!("ID   STATE          POLLS NAME");
+            for task in tasks {
+                println!(
+                    "{:>2}   {:<13} {:>5} {}",
+                    task.id,
+                    task.state.as_str(),
+                    task.poll_count,
+                    task.name
+                );
+            }
+        }
+        "kill" => {
+            let Some(raw_id) = parts.next() else {
+                println!("Usage: kill <task_id>");
+                return;
+            };
+
+            let task_id = match raw_id.parse::<u64>() {
+                Ok(id) => id,
+                Err(_) => {
+                    println!("Invalid task id: '{}'", raw_id);
+                    return;
+                }
+            };
+
+            match crate::task::executor::request_kill(task_id) {
+                crate::task::executor::KillRequestResult::Queued => {
+                    println!("Kill requested for task {}.", task_id);
+                }
+                crate::task::executor::KillRequestResult::AlreadyQueued => {
+                    println!("Task {} is already waiting to be killed.", task_id);
+                }
+                crate::task::executor::KillRequestResult::NotFound => {
+                    println!("Task {} not found.", task_id);
+                }
+            }
+        }
+        "sleep" => {
+            let Some(raw_ticks) = parts.next() else {
+                println!("Usage: sleep <ticks>");
+                return;
+            };
+
+            let ticks = match raw_ticks.parse::<usize>() {
+                Ok(n) if n > 0 => n,
+                Ok(_) => {
+                    println!("Ticks must be > 0.");
+                    return;
+                }
+                Err(_) => {
+                    println!("Invalid tick count: '{}'", raw_ticks);
+                    return;
+                }
+            };
+
+            println!("Sleeping for {} ticks...", ticks);
+            sleep_ticks(ticks).await;
+            println!("Awake.");
+        }
         _ => {
             println!("Unknown command: '{}'", cmd);
             println!("Type 'help' to list commands.");
         }
+    }
+}
+
+async fn sleep_ticks(ticks: usize) {
+    let mut ticker = TickStream::new();
+    for _ in 0..ticks {
+        ticker.next().await;
     }
 }

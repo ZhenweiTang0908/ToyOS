@@ -39,3 +39,4 @@ That's it! QEMU will pop up and you'll be in NewTownOS.
 *   `clear` - Clean up the mess.
 *   `heap` - See memory stats.
 *   `shutdown` - Turn it off.
+*   Tasks management: `ps`, `sleep`, `kill`.

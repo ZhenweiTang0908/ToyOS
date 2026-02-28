@@ -34,8 +34,8 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     use toy_os::task::shell;
     use toy_os::task::status_bar;
     let mut executor = Executor::new();
-    executor.spawn(Task::new(status_bar::run()));
-    executor.spawn(Task::new(shell::run()));
+    executor.spawn(Task::new_named("status_bar", status_bar::run()));
+    executor.spawn(Task::new_named("shell", shell::run()));
     // run the task executor
     executor.run();
     println!("It did not crash!");
